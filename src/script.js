@@ -17,6 +17,9 @@ import { IFCLoader } from "three/examples/jsm/loaders/IFCLoader";
 import {Reflector } from 'three/examples/jsm/objects/Reflector'
 import { Scene } from 'three';
 import { ARButton } from 'three/examples/jsm/webxr/ARButton';
+import {OutlinePass} from 'three/examples/jsm/postprocessing/OutlinePass';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 
 
 const dracoLoader = new DRACOLoader();
@@ -39,7 +42,7 @@ let wooden_Texture = new THREE.TextureLoader().load( "textures/wood_texture_3.jp
 wooden_Texture.wrapS = THREE.RepeatWrapping;
 wooden_Texture.wrapT = THREE.RepeatWrapping;
 wooden_Texture.repeat.set(2, 2);
-let raycaster, pointer, INTERSECTED, material, cube, hitbox;
+let raycaster, pointer, INTERSECTED, material, cube, hitbox, outlinePass, selectedObjects, composer;
 let currentIntersect = null;
 const clippingPlane = new THREE.Plane();
 const mouseStart = new THREE.Vector2();
@@ -85,7 +88,7 @@ function init(){
         renderer.setPixelRatio(2)
     });
     const localPlane = new THREE.Plane( new THREE.Vector3( 0, -1, 0), 0.8 );
-    const geometry = new THREE.BoxGeometry( 2, 2, 2);
+    const geometry = new THREE.BoxGeometry( 0.5, 0.5, 0.5);
     const material = new THREE.MeshPhongMaterial( {
         color: 0x80ee10,
         shininess: 100,
@@ -98,10 +101,17 @@ function init(){
     } );
     let cubeMesh = new THREE.Mesh( geometry, material );
     let newPlane = null;
+    composer = new EffectComposer( renderer );
+    const renderPass = new RenderPass( scene, camera );
+    composer.addPass( renderPass );
+    outlinePass = new OutlinePass( new THREE.Vector2( window.innerWidth, window.innerHeight ), scene, camera );
+    composer.addPass( outlinePass );
+    // scene.add(cubeMesh);
     // Set up event listeners
     let isDragging = false;
     let previousMousePosition = { x: 0, y: 0 };
-    loadTemplateModel();
+    window.addEventListener('click',onPointerClick);
+    // loadTemplateModel();
     load_model(CHAIR_PATH, TEXTURES,{sx:1.2, sy:1.2, sz:1.2}, {x : 0, z : -0.5});
     setOrbitControlsLimits(camera);
     lights();
@@ -118,7 +128,6 @@ function loadTemplateModel(){
                 child.castShadow = true;
                 child.receiveShadow = true;
             }
-            
         })
         scene.add(model);
     })
@@ -225,6 +234,8 @@ function buildColors(colors) {
     // );
     // controls.minDistance  = 5;
     // controls.maxDistance  = 5;
+    controls.maxPolarAngle = Math.PI / 2;
+    controls.minPolarAngle = Math.PI / 3;
     controls.enableZoom = true;
     return controls;
   }
@@ -236,17 +247,31 @@ function cube_box(size){
     let cube = new THREE.Mesh( geometry, material );
     return cube;
 }
+function addSelectedObject( object ) {
 
-function onPointerMove( event ) {
+    selectedObjects = [];
+    selectedObjects.push( object );
+
+}
+
+function onPointerClick( event ) {
     pointer.x = ( event.clientX / window.innerWidth ) * 2 - 1;
     pointer.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
     raycaster.setFromCamera( pointer, camera );
+    const intersects = raycaster.intersectObjects(scene.children);
+    if(intersects.length > 0){
+        console.log("Object Name :", intersects[0].object.name);
+        const selectedObject = intersects[ 0 ].object;
+        addSelectedObject( selectedObject );
+		outlinePass.selectedObjects = selectedObjects;
+    }
 }
 
 function renderLoop() {
     // controls.update() 
     renderer.localClippingEnabled = true;
-    renderer.render(scene, camera) // render the scene using the camera
+    renderer.render(scene, camera);
+    composer.render(); // render the scene using the camera
     requestAnimationFrame(renderLoop);
 }
 
